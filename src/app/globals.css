@@ -1,0 +1,60 @@
+@import "tailwindcss";
+
+/*
+ * Semantic tokens. Components never name a raw colour, size or family: they name
+ * a role. Utilities compile to `var(--color-*)`, so redefining the variables
+ * under a media query re-themes the whole app without touching a component.
+ *
+ * Measured contrast against both surfaces, lowest of the two (AA needs 4.5:1):
+ *   light  content 16.6 · content-muted 5.6 · accent 6.2 · positive 4.9 · negative 6.0
+ *   dark   content 14.1 · content-muted 6.8 · accent 8.3 · positive 9.2 · negative 6.9
+ *
+ * --color-border is a separator, not a UI component boundary, so 3:1 does not
+ * apply to it. Anything that has to be *identified* — focus rings, input
+ * outlines — uses --color-accent, which clears 3:1 in both themes.
+ */
+@theme {
+  --color-surface: #ffffff;
+  --color-surface-muted: #f4f5f7;
+  --color-border: #d8dbe0;
+  --color-content: #14161a;
+  --color-content-muted: #5b6270;
+  --color-accent: #1c4ed8;
+  --color-positive: #0f7a4d;
+  --color-negative: #b42318;
+
+  --font-sans:
+    ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-mono:
+    ui-monospace, "SF Mono", "Cascadia Mono", "Liberation Mono", monospace;
+}
+
+/*
+ * Dark theme follows the OS, which costs zero JavaScript. A manual switch would
+ * need a client component and persisted state; when that is wanted, add a
+ * `:root[data-theme="dark"]` selector alongside this one and the tokens below
+ * serve both paths unchanged.
+ */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-surface: #0e1116;
+    --color-surface-muted: #171b22;
+    --color-border: #2b313b;
+    --color-content: #e6e8eb;
+    --color-content-muted: #9aa3b0;
+    --color-accent: #8ab4ff;
+    --color-positive: #3dd68c;
+    --color-negative: #ff7b72;
+  }
+}
+
+:root {
+  /* Lets form controls and scrollbars follow the theme too. */
+  color-scheme: light dark;
+}
+
+body {
+  background-color: var(--color-surface);
+  color: var(--color-content);
+  font-family: var(--font-sans);
+}

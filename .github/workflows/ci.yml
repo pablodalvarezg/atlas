@@ -1,0 +1,31 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24.21.0
+          cache: npm
+
+      # npm 11 only runs the install scripts listed in package.json#allowScripts.
+      # unrs-resolver is one of them: without its postinstall the boundaries
+      # rules resolve nothing and pass green without checking anything.
+      - run: npm ci
+
+      - run: npm run check
+      - run: npm run lint
+      - run: npm test
+      - run: npm run build
+
+  # TODO(pablo): Lighthouse CI job against the Vercel preview deploy. Thresholds
+  # for LCP, CLS and JavaScript bytes get measured on the first deploy — writing
+  # numbers before measuring is inventing data.
