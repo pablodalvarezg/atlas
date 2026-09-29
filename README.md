@@ -40,9 +40,10 @@ green without checking any import at all.**
 - The key lives in the environment, validated with Zod in
   [`src/shared/config/env.ts`](src/shared/config/env.ts). Nothing else in the
   codebase reads `process.env`. Copy `.env.example` to `.env.local` to set it.
-- `src/modules/catalog/data/` is the only place that talks to CoinGecko. Responses
-  are validated before entering the domain, and mapped onto domain types — the
-  raw upstream JSON never reaches a component.
+- `src/modules/catalog/data/` will be the only place that talks to CoinGecko:
+  responses validated before entering the domain and mapped onto domain types, so
+  the raw upstream JSON never reaches a component. Not written yet — the quota
+  arithmetic below is what it gets built against.
 
 ### The free plan's limits, which are a design input
 
@@ -78,9 +79,10 @@ defaults are the development ones on purpose, so a CI build cannot quietly spend
 250 detail calls. That leaves ~4,600 calls of headroom, roughly 18 builds that
 prerender token pages: the ceiling is CI's, not the revalidation's.
 
-The defaults are the development ones on purpose, so a CI build cannot quietly
-spend 250 detail calls. Going to production means changing two variables, not
-editing code.
+A production deploy must also set `NEXT_PUBLIC_SITE_URL`. The build refuses to
+proceed without it when `VERCEL_ENV` is `production`, because the localhost
+fallback would otherwise end up inside canonical URLs and the sitemap without
+anything looking broken.
 
 Caching is three layers, and it is half the project:
 
@@ -96,17 +98,24 @@ not a static export.
 
 ## How the budget is measured
 
-Lighthouse CI runs in GitHub Actions against the Vercel preview deploy and
-**fails the job** when a threshold is exceeded. At minimum: LCP, CLS and
-JavaScript bytes on a token page.
+**Not yet — this section is the plan, not the current state.** CI today runs
+`check`, `lint`, `test` and `build`; the Lighthouse job is a `TODO` in
+[ci.yml](.github/workflows/ci.yml) and there is no token page to measure.
 
-`TODO(pablo):` thresholds get set from the first deploy's measurement, and only
-ever move down from there. Numbers written before a measurement exists would be
-invented.
+The plan, in the order it can happen:
 
-A unit test opens the built HTML of a token page and looks for the price inside
-it. If a stray `"use client"` pushes the data to the browser, that test goes red
-before any metric does.
+1. Lighthouse CI in GitHub Actions against the Vercel preview deploy, **failing
+   the job** when a threshold is exceeded. At minimum LCP, CLS and JavaScript
+   bytes on a token page.
+2. `TODO(pablo):` thresholds come from the first deploy's measurement and only
+   ever move down. Numbers written before a measurement exists would be invented.
+3. A test that opens the built HTML of a token page and looks for the price
+   inside it, so that a stray `"use client"` pushing data to the browser goes red
+   before any metric does. It needs `app/token/[id]/` to exist first.
+
+Until step 3 lands, one guard is already in place: `shared/config/env.ts` is
+marked `server-only`, so a client component that reaches the configuration fails
+the build instead of quietly shipping Zod to the browser.
 
 ## Layout
 

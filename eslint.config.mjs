@@ -56,10 +56,13 @@ const eslintConfig = defineConfig([
           rules: [
             // Routing composes: modules through their public API, plus shared primitives.
             { from: ["app"], allow: ["app", "module", "shared"] },
-            // A module's index.ts is the only file that may see all of its own layers.
+            // A module's index.ts is the only file that may see all of its own
+            // layers, and the only one that may reach another module — through
+            // that module's index.ts, never into its layers.
             {
               from: ["module"],
               allow: [
+                "module",
                 ownModule("domain"),
                 ownModule("data"),
                 ownModule("ui"),

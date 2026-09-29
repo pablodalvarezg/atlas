@@ -246,6 +246,22 @@ Trabajá solo en la fase actual. No adelantes la siguiente.
 - [ ] README: cómo correr, de dónde salen los datos, cómo se mide el presupuesto.
 - [ ] ADR 0001: ISR en vez de `output: 'export'`.
 
+#### Orden de trabajo, porque cada paso hace barato al siguiente
+
+1. **Andamiaje con las reglas puestas:** Next + TS strict + Tailwind + Vitest +
+   ESLint con `boundaries`, y el CI corriendo `check`, `lint`, `test` y `build`.
+   Sin features. **Hecho.**
+2. **`catalog/domain` completo y testeado sin red:** el tipo `Token`, los filtros,
+   el orden y el formato contra un fixture JSON. Acá se decide la forma del
+   dominio, que es lo más caro de cambiar después.
+3. **`catalog/data` contra CoinGecko de verdad**, con el schema de Zod y las
+   revalidaciones comentadas una por una. Primer deploy a Vercel.
+4. **Lighthouse CI con los umbrales medidos en ese primer deploy**, y el test que
+   busca el precio dentro del HTML. A partir de ahí el presupuesto defiende solo
+   lo que el proyecto promete.
+
+Recién entonces empieza la UI de verdad.
+
 ### Fase 2
 
 Comparador lado a lado; endpoint propio de redirección para contar clics sin
@@ -280,6 +296,7 @@ mediciones desde el principio; la de "antes" no se recupera más tarde.
 - **Server Components por defecto.** `"use client"` solo donde haya estado, eventos o APIs del navegador, y lo más abajo posible: la directiva es contagiosa hacia abajo.
 - Cuando un componente cliente envuelve contenido estático, pasalo como `children` en vez de importarlo adentro: así ese contenido sigue renderizándose en el servidor.
 - Sin estado global salvo necesidad demostrada.
+- **Estética: clara y densa, tabular, cerca de un terminal financiero sobrio.** Paleta propia, que después se replica como el tema `atlas` del portfolio; ese tema se crea cuando llegue el case study, no antes.
 - **Tokens semánticos, no valores a mano.** Nada de colores, fuentes, radios ni espaciados hardcodeados en componentes.
 - **`font-variant-numeric: tabular-nums` en toda columna de números**, o las cifras bailan al actualizarse.
 - **Si formateás números o fechas, el tag de locale lleva región.** `es` a secas formatea 1200 como `1200 US$`; `es-AR` da `US$ 1.200`. El formateo vive en `catalog/domain` y se testea ahí.
@@ -369,6 +386,13 @@ distintas.
 
 ## No hacer
 
+- **Commitear o pushear sin permiso explícito de Pablo.** Incluye el primer commit
+  de un repo nuevo, un `git add`, un `git rm` y un `--amend`. El estado en el que
+  se entrega una tarea es el árbol sucio con `check`, `lint` y `test` en verde; el
+  commit se pide, no se asume. Si algo parece necesitar un commit para avanzar,
+  preguntá.
+- **Borrar o sobrescribir archivos de Pablo sin avisar**, en particular los `.md`
+  que escribió él. Proponé el borrado y dejá que lo haga o lo confirme.
 - Microservicios, backends separados o colas.
 - Una base de datos en la fase 1.
 - Lógica de negocio en `app/` o en componentes de `ui/`.
