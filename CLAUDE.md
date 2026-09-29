@@ -93,9 +93,11 @@ seguí la documentación de esa versión: el App Router cambió bastante entre m
 **Dependencias nuevas:** justificá por qué no alcanza con lo existente. En
 particular, tres que no van a entrar sin una razón muy buena:
 
-- **Librerías de gráficos.** Un sparkline es un `<path>` de SVG calculado en el
-  servidor. Una librería de charts son decenas de KB de JavaScript en la página
-  que tiene presupuesto.
+- **Librerías de gráficos en el listado.** Un sparkline es un `<path>` de SVG
+  calculado en el servidor: con 250 filas, una librería son 250 instancias
+  montadas en el cliente. Para el gráfico de precios de la **ficha** sí entra una
+  librería —`lightweight-charts`— como mejora progresiva sobre números ya
+  renderizados en el servidor. Ver `docs/adr/0002`.
 - **Clientes HTTP.** `fetch` ya viene, y es el que integra la caché de Next.
 - **Librerías de estado.** Si aparece estado global, el diseño está mal.
 
@@ -271,8 +273,12 @@ que depende de lo anterior.
 
 ### Fuera de alcance, a propósito
 
-Carteras, alertas de precio, login, gráficos interactivos pesados, datos que
-CoinGecko no dé gratis.
+Carteras, alertas de precio, login, datos que CoinGecko no dé gratis.
+
+El gráfico de precios interactivo de la ficha **sí está adentro** desde el
+2026-09-29 (`docs/adr/0002`), con una condición: es aditivo. Los números se
+renderizan en el servidor y el gráfico se monta al lado. Si el presupuesto de
+performance no lo banca, se cae el gráfico, no los números.
 
 ## El presupuesto de performance
 
@@ -325,6 +331,8 @@ portfolio. Si descubrís algo del entorno que costó averiguar, anotalo acá.
 - **npm 11 bloquea los scripts de instalación** salvo los aprobados en `allowScripts`. Importa: `unrs-resolver` es el resolver nativo de `eslint-import-resolver-typescript`, y sin su postinstall **las reglas de boundaries pasan en verde sin comprobar nada** en un clone limpio.
 - **En `allowScripts`, la clave va sin versión.** `npm install-scripts approve <pkg>` escribe `"unrs-resolver@1.12.2": true`, y ese pin deja de cubrir el paquete en el próximo bump: el postinstall vuelve a bloquearse y las boundaries vuelven a pasar sin comprobar nada. Un rango (`@^1`) **no** se acepta; el nombre pelado (`"unrs-resolver": true`) sí, y cubre toda versión. Verificado: `npm install` no emite el warning `install-scripts`.
 - **`next typegen` antes de `tsc`.** Next 16 genera tipos globales (`LayoutProps`, `PageProps`) en `.next/types/`, y `next-env.d.ts` los importa. En un clone limpio, `tsc --noEmit` a secas falla porque esos tipos no existen todavía. Por eso `npm run check` es `next typegen && tsc --noEmit`.
+- **Git Bash traduce los argumentos que empiezan con `/`.** `taskkill /PID 1234 /F` falla con `Argumento u opción no válido - "C:/Program Files (x86)/Git/PID"`: MSYS lee `/PID` como una ruta POSIX y la convierte. Salidas, de mejor a peor: `Stop-Process -Id 1234 -Force` en PowerShell, `taskkill //PID 1234 //F` con la barra duplicada, o `MSYS_NO_PATHCONV=1` delante. Vale para cualquier `.exe` de Windows con flags de barra, no solo `taskkill`.
+- **`next dev` no arranca un segundo servidor sobre el mismo directorio.** Toma otro puerto, avisa `Another next dev server is already running` y te da el PID y el log en `.next/dev/logs/next-development.log`. Si un agente dejó uno vivo, matalo con el PID que imprime ahí. **Un agente que levanta el dev server lo baja antes de terminar el turno**, o queda ocupando el 3000 en la sesión siguiente.
 - **Los heredocs de esta terminal se comen un nivel de backslash, incluso citados.** Cualquier archivo con secuencias de escape se escribe con la herramienta de edición, no por heredoc. Y la lógica que puede estar mal va en un `.ts` de `domain/`, no al lado del componente, para que los tests la vean.
 
 ## Comandos

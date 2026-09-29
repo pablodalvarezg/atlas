@@ -109,13 +109,20 @@ The plan, in the order it can happen:
    bytes on a token page.
 2. `TODO(pablo):` thresholds come from the first deploy's measurement and only
    ever move down. Numbers written before a measurement exists would be invented.
-3. A test that opens the built HTML of a token page and looks for the price
-   inside it, so that a stray `"use client"` pushing data to the browser goes red
-   before any metric does. It needs `app/token/[id]/` to exist first.
+   Step 3 is **done**: `prerendered-html.test.ts` opens the HTML that `next build`
+   wrote for every token page and asserts the price is inside it. It reads build
+   output rather than rendering anything, because what matters is the bytes a
+   visitor is served — which is why `npm run build` runs _before_ `npm test`, in CI
+   and locally.
 
-Until step 3 lands, one guard is already in place: `shared/config/env.ts` is
-marked `server-only`, so a client component that reaches the configuration fails
-the build instead of quietly shipping Zod to the browser.
+What it catches: the route ceasing to be prerendered, and data moving to a
+browser-side fetch. What it does not catch, despite the obvious phrasing: a
+stray `"use client"`, since client components are still server-rendered into the
+initial HTML.
+
+A second guard is already in place: `shared/config/env.ts` is marked
+`server-only`, so a client component that reaches the configuration fails the
+build instead of quietly shipping Zod to the browser.
 
 ## Layout
 

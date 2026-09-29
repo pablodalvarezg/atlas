@@ -92,9 +92,14 @@ one module's `ui/` reaching into another's layers — confirm each one errors, t
 delete them. Reaching for real paths matters: a fixture importing a path that
 does not exist reproduces the bug instead of catching it.
 
-**A stray `"use client"` moves the data out of the HTML and everything stays
-green.** Build, lint and unit tests all pass while the thesis of the project
-breaks. Once `app/token/[id]/` exists, the check is the phase 1 test that greps
-the price out of the built HTML — run it, do not assume it ran. Until that route
-exists, say in the report that this check was not applicable rather than silently
-skipping it.
+**The data can leave the HTML while build, lint and tests all stay green.** The
+check is `prerendered-html.test.ts`, which greps the price out of what
+`next build` wrote for each token page. Run it, do not assume it ran — and note
+that it needs a build first, which is why CI builds before it tests.
+
+Be precise about what that test does and does not catch, because the obvious
+phrasing is wrong. Adding `"use client"` to a component does **not** remove its
+output from the initial HTML: client components are still server-rendered. What
+the test catches is the route ceasing to be prerendered, and data moving to a
+browser-side fetch so the server has nothing to render. Those are the real
+regressions; a finding that claims otherwise is wrong on the framework.

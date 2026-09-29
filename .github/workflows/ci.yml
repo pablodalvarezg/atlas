@@ -23,8 +23,14 @@ jobs:
 
       - run: npm run check
       - run: npm run lint
-      - run: npm test
+
+      # Build before test, not after: the thesis test asserts on the HTML that
+      # `next build` writes for a token page, so the build output has to exist.
       - run: npm run build
+        env:
+          COINGECKO_API_KEY: ${{ secrets.COINGECKO_API_KEY }}
+
+      - run: npm test
 
   # TODO(pablo): Lighthouse CI job against the Vercel preview deploy. Thresholds
   # for LCP, CLS and JavaScript bytes get measured on the first deploy — writing

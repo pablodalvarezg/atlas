@@ -1,11 +1,30 @@
+import {
+  CatalogView,
+  DEFAULT_LISTING_QUERY,
+  fetchTokens,
+} from "@modules/catalog";
 import { site } from "@shared/config/site";
 
-export default function CatalogPage() {
+/*
+ * ISR. This route deliberately does not read `searchParams`: doing so is a
+ * runtime API, and it would push the page to per-request rendering and forfeit
+ * the edge cache. Refined views live at /search instead, so the URL that gets
+ * indexed and receives most of the traffic stays prerendered.
+ *
+ * 600 s matches the upstream fetch's window, so the page never outlives the
+ * data inside it.
+ */
+export const revalidate = 600;
+
+export default async function CatalogPage() {
+  const tokens = await fetchTokens();
+
   return (
-    <main className="mx-auto max-w-5xl px-4 py-12">
-      <h1 className="text-2xl font-semibold">{site.name}</h1>
-      <p className="mt-2 max-w-prose text-content-muted">{site.description}</p>
-      {/* The catalogue itself lands with the catalog module. */}
-    </main>
+    <CatalogView
+      tokens={tokens}
+      query={DEFAULT_LISTING_QUERY}
+      title={site.name}
+      subtitle={site.description}
+    />
   );
 }

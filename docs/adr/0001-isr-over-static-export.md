@@ -45,6 +45,34 @@ HTML with the values in it for every prerendered route.
   the case study, not hidden. `x-nextjs-cache` on the response reports it as
   `HIT`, `STALE`, `MISS` or `REVALIDATED`, which is how it gets verified rather
   than asserted.
+- **The listing is split across two routes, and that split exists because of
+  this decision.** `searchParams` is a runtime API in this version of Next, so
+  any route that reads it renders per request — inherently, not by
+  misconfiguration, since a page answering arbitrary query strings has
+  infinitely many variants to prerender. Rather than let that cost apply to the
+  whole catalogue, `/` never reads them and serves the default ordering, while
+  `/search` reads them and serves every refined view. Measured on a production
+  build:
+
+  | Route     | Rendering                          | `Cache-Control`                                           |
+  | --------- | ---------------------------------- | --------------------------------------------------------- |
+  | `/`       | prerendered, `x-nextjs-cache: HIT` | `s-maxage=600, stale-while-revalidate=31535400`           |
+  | `/search` | per request                        | `private, no-cache, no-store, max-age=0, must-revalidate` |
+
+  So the URL that gets indexed and takes most of the traffic keeps the edge
+  cache, and only a visitor who actually searches or reorders pays for a render.
+  `/search` carries `robots: noindex, follow`: its variants are thin duplicates
+  of `/` and crawling them wastes budget.
+
+- **Refined views cost no extra CoinGecko credits.** The Data Cache is keyed on
+  the upstream URL, not the page URL, and `fetchTokens()` builds the same URL
+  regardless of the query — filtering and ordering happen in `catalog/domain`
+  over the list already fetched. Verified against a production build: twenty
+  distinct query strings left `.next/cache/fetch-cache` at one entry and every
+  response took under 30 ms, against 278 ms for one real round trip to
+  CoinGecko. Delegating search to the API would break this, since each term
+  would become its own cache entry and a crawler walking the search box could
+  drain the monthly quota.
 - Real route handlers exist, which the phase 2 outbound-click endpoint needs.
 - **The edge cache layer is not code we write.** Next already emits
   `s-maxage={revalidate}, stale-while-revalidate={expire - revalidate}` on ISR

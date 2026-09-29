@@ -53,7 +53,18 @@
   color-scheme: light dark;
 }
 
+/* Beyond the cap the page is centred, so an ultra-wide screen keeps the surface
+   colour instead of showing the browser default at the edges. */
+html {
+  background-color: var(--color-surface);
+}
+
 body {
+  /* Full width up to 1440: a dense table wants the room, but past that the eye
+     loses the row on the way from the name to the price. */
+  max-width: 1440px;
+  margin-inline: auto;
+  min-height: 100dvh;
   background-color: var(--color-surface);
   color: var(--color-content);
   font-family: var(--font-sans);

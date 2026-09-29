@@ -1,15 +1,15 @@
 import Link from "next/link";
 
 export const metadata = {
-  title: "Page not found",
+  title: "Token not found",
 };
 
-export default function NotFound() {
+export default function TokenNotFound() {
   return (
     <main className="px-6 py-12">
-      <h1 className="text-2xl font-semibold">Page not found</h1>
+      <h1 className="text-2xl font-semibold">Token not found</h1>
       <p className="mt-2 text-content-muted">
-        There is nothing at this address.
+        That token is not in the catalogue.
       </p>
       <Link
         href="/"
