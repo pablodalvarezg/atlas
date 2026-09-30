@@ -28,6 +28,10 @@ type Props = {
    * number rather than read off `venues.props`: reaching into a React element's
    * props couples this to another module's prop names and breaks the moment the
    * element is wrapped in anything.
+   *
+   * Optional, and with no default on purpose. A caller that forgets it gets a
+   * section with no summary line, which is merely plain. A default of 0 would
+   * have it announce "No markets listed" above a list of five.
    */
   readonly venueCount?: number;
   /** The fiat converter, under the chart and the same width as it. */
@@ -88,7 +92,7 @@ export function TokenDetail({
   token,
   chart,
   venues,
-  venueCount = 0,
+  venueCount,
   converter,
 }: Props) {
   return (
@@ -268,13 +272,15 @@ export function TokenDetail({
                 title="Where to buy"
                 id="where-to-buy"
                 preview={
-                  <Preview
-                    label={
-                      venueCount === 0
-                        ? "No markets listed"
-                        : `Sold in ${venueCount} market${venueCount === 1 ? "" : "s"}`
-                    }
-                  />
+                  venueCount === undefined ? undefined : (
+                    <Preview
+                      label={
+                        venueCount === 0
+                          ? "No markets listed"
+                          : `Sold in ${venueCount} market${venueCount === 1 ? "" : "s"}`
+                      }
+                    />
+                  )
                 }
                 defaultOpen
               >

@@ -49,7 +49,11 @@ export function Disclosure({
           width="14"
           height="14"
           aria-hidden="true"
-          className="shrink-0 text-content-muted transition-transform duration-200 group-open:ml-auto group-open:rotate-180"
+          // Pushed right by the preview when there is one; by itself when there
+          // is not, and once the preview hides on open.
+          className={`shrink-0 text-content-muted transition-transform duration-200 group-open:rotate-180 ${
+            preview === undefined ? "ml-auto" : "group-open:ml-auto"
+          }`}
         >
           <path
             d="M4 6l4 4 4-4"
