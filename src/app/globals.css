@@ -23,8 +23,17 @@
   --color-positive: #0f7a4d;
   --color-negative: #b42318;
 
+  /* Chart palette, in shadcn's shape: one token per series, referenced by
+     number so a second series is a second token and not a new decision. */
+  --color-chart-1: #2563eb;
+  --color-chart-2: #0f7a4d;
+  --color-chart-3: #b42318;
+
+  /* Inter is loaded by next/font in the layout, which sets --font-inter. The
+     stack after it is what renders while the font swaps in. */
   --font-sans:
-    ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    var(--font-inter), ui-sans-serif, system-ui, -apple-system, "Segoe UI",
+    Roboto, sans-serif;
   --font-mono:
     ui-monospace, "SF Mono", "Cascadia Mono", "Liberation Mono", monospace;
 }
@@ -45,6 +54,9 @@
     --color-accent: #8ab4ff;
     --color-positive: #3dd68c;
     --color-negative: #ff7b72;
+    --color-chart-1: #7aa2ff;
+    --color-chart-2: #3dd68c;
+    --color-chart-3: #ff7b72;
   }
 }
 
@@ -68,4 +80,37 @@ body {
   background-color: var(--color-surface);
   color: var(--color-content);
   font-family: var(--font-sans);
+}
+
+/*
+ * Animated <details>.
+ *
+ * `interpolate-size` is what lets a transition run to `auto`, which is the whole
+ * reason this can be CSS instead of a client component measuring heights.
+ * `allow-discrete` carries `content-visibility` along so the content is not
+ * clipped away before the height finishes.
+ *
+ * Browsers without `::details-content` open and close instantly. That is the
+ * right thing to lose: the disclosure still works, it just does not slide.
+ */
+:root {
+  interpolate-size: allow-keywords;
+}
+
+::details-content {
+  block-size: 0;
+  overflow: hidden;
+  transition:
+    block-size 200ms ease,
+    content-visibility 200ms allow-discrete;
+}
+
+details[open]::details-content {
+  block-size: auto;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  ::details-content {
+    transition: none;
+  }
 }

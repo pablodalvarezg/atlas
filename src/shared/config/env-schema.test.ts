@@ -23,6 +23,23 @@ describe("parseEnv", () => {
     expect(parsed.ATLAS_TOKEN_COUNT).toBe(10);
   });
 
+  it("lets a build prerender fewer token pages than the listing shows", () => {
+    // Each prerendered page costs one tickers call, so this is the build bill.
+    const parsed = parseEnv({
+      ATLAS_TOKEN_COUNT: "250",
+      ATLAS_PRERENDERED_TOKEN_COUNT: "25",
+    });
+
+    expect(parsed.ATLAS_PRERENDERED_TOKEN_COUNT).toBe(25);
+  });
+
+  it("allows prerendering nothing, which makes a build cost one credit", () => {
+    expect(
+      parseEnv({ ATLAS_PRERENDERED_TOKEN_COUNT: "0" })
+        .ATLAS_PRERENDERED_TOKEN_COUNT,
+    ).toBe(0);
+  });
+
   it("takes the production token count from the environment", () => {
     expect(parseEnv({ ATLAS_TOKEN_COUNT: "250" }).ATLAS_TOKEN_COUNT).toBe(250);
   });

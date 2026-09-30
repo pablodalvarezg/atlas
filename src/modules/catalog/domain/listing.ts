@@ -27,6 +27,11 @@ export type ListingQuery = {
   readonly search: string;
   readonly sort: SortKey;
   readonly direction: SortDirection;
+  /**
+   * The preset slug the reader came from, carried so that reordering a preset
+   * stays inside it. Empty means the whole catalogue.
+   */
+  readonly preset: string;
 };
 
 /**
@@ -49,6 +54,7 @@ export const DEFAULT_LISTING_QUERY: ListingQuery = {
   search: "",
   sort: "rank",
   direction: DEFAULT_DIRECTION.rank,
+  preset: "",
 };
 
 const isSortKey = (value: string): value is SortKey =>
@@ -74,7 +80,12 @@ export function parseListingQuery(
       ? rawDirection
       : DEFAULT_DIRECTION[sort];
 
-  return { search: firstValue(params.q)?.trim() ?? "", sort, direction };
+  return {
+    search: firstValue(params.q)?.trim() ?? "",
+    sort,
+    direction,
+    preset: firstValue(params.preset)?.trim() ?? "",
+  };
 }
 
 export function filterTokens(
@@ -158,6 +169,8 @@ export function sortQuery(current: ListingQuery, key: SortKey): string {
 
   const params = new URLSearchParams();
   if (current.search !== "") params.set("q", current.search);
+  // Carried first so the refined route knows which catalogue it is reordering.
+  if (current.preset !== "") params.set("preset", current.preset);
   params.set("sort", key);
   params.set("dir", direction);
 

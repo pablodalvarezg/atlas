@@ -3,8 +3,10 @@ import { describe, expect, it } from "vitest";
 import {
   EMPTY,
   formatCompactUsd,
+  formatHour,
   formatPercentage,
   formatPrice,
+  formatShortDate,
   formatSupply,
 } from "@modules/catalog/domain/format";
 
@@ -57,5 +59,24 @@ describe("formatSupply", () => {
   it("renders an unknown supply as an empty cell", () => {
     // A coin with no max supply is not a coin with a max supply of zero.
     expect(formatSupply(null)).toBe(EMPTY);
+  });
+});
+
+describe("chart axis labels", () => {
+  // Fixed instants in UTC, so the assertions do not move with the machine.
+  const noonUtc = Date.UTC(2026, 2, 12, 12, 0, 0);
+
+  it("labels a one-day window by the hour", () => {
+    expect(formatHour(noonUtc)).toBe("12 PM");
+  });
+
+  it("labels a multi-day window by the day", () => {
+    expect(formatShortDate(noonUtc)).toBe("Mar 12");
+  });
+
+  it("pins both to UTC, so the chart does not shift with the reader", () => {
+    // The series itself is cut on UTC day boundaries; labelling it in a local
+    // zone would put the last point on a different day than the cut.
+    expect(formatShortDate(Date.UTC(2026, 2, 12, 23, 30))).toBe("Mar 12");
   });
 });

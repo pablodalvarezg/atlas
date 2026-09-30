@@ -95,33 +95,46 @@ particular, tres que no van a entrar sin una razón muy buena:
 
 - **Librerías de gráficos en el listado.** Un sparkline es un `<path>` de SVG
   calculado en el servidor: con 250 filas, una librería son 250 instancias
-  montadas en el cliente. Para el gráfico de precios de la **ficha** sí entra una
-  librería —`lightweight-charts`— como mejora progresiva sobre números ya
-  renderizados en el servidor. Ver `docs/adr/0002`.
+  montadas en el cliente. Esa regla **no cambió y no está en discusión**.
+  Para el gráfico de precios de la **ficha** sí entra una: **shadcn/ui sobre
+  Recharts**, decidido el 2026-09-29 en `docs/adr/0003`, que supersede la mitad
+  del 0002. Costó **+63 % de JavaScript** en esa ruta, medido, y el presupuesto
+  se puso rojo antes de que entrara — que es para lo que está.
 - **Clientes HTTP.** `fetch` ya viene, y es el que integra la caché de Next.
 - **Librerías de estado.** Si aparece estado global, el diseño está mal.
 
 ### Estructura
 
+Lo que hay hoy, no solo adónde van las cosas:
+
 ```
 src/
 ├─ app/                        # SOLO routing y composición. Finas: obtienen datos vía módulos.
-│  ├─ layout.tsx               # html, body, tokens globales
-│  ├─ page.tsx                 # el catálogo
-│  ├─ token/[id]/page.tsx      # la página de un token
+│  ├─ layout.tsx               # html, body, tokens globales, header
+│  ├─ page.tsx                 # el catálogo. Prerenderizada: NO lee searchParams
+│  ├─ search/page.tsx          # las vistas refinadas. Por request, noindex
+│  ├─ category/[slug]/page.tsx # los presets (RWA, exchange tokens). Prerenderizadas
+│  ├─ token/[id]/page.tsx      # la ficha de un token. SSG + dynamicParams
+│  ├─ icon.svg                 # favicon por convención de archivo
 │  └─ not-found.tsx
-├─ modules/                    # Un módulo por dominio. Cada uno expone su API en index.ts.
+├─ modules/
 │  ├─ catalog/                 # El dominio central: qué es un token y cómo se lista
-│  │  ├─ domain/               # Tipos, filtros, orden, formato. TS puro, sin Next/React/IO.
-│  │  ├─ data/                 # Repositorio: único lugar que habla con CoinGecko
-│  │  ├─ ui/                   # Tabla, fila, buscador, ficha. Reciben props.
-│  │  └─ index.ts              # API pública del módulo
+│  │  ├─ domain/               # token · listing · format · presets · price-history · highlights
+│  │  ├─ data/                 # token-repository · price-history-repository · schemas Zod
+│  │  ├─ ui/                   # CatalogView · TokenTable · TokenDetail · Highlights · PriceChartPanel
+│  │  └─ index.ts
 │  ├─ markets/                 # Dónde comprarlo: venues, tickers y links de salida
-│  └─ seo/                     # Canonical, sitemap, JSON-LD, Open Graph
-└─ shared/                     # Código sin dominio, reutilizable por cualquier módulo
-   ├─ ui/                      # Primitivas: Button, Container, Section, Table
-   └─ config/                  # env.ts (Zod) y site.ts
+│  ├─ currency/                # Conversión a fiat, para información
+│  └─ seo/                     # TODO: canonical, sitemap, JSON-LD, Open Graph
+└─ shared/
+   ├─ ui/                      # Logo · SiteHeader · SiteNav · Skeleton · chart (shadcn) · cn
+   └─ config/                  # env.ts (Zod, server-only) · env-schema.ts (puro) · site.ts
 ```
+
+**`env` está partido en dos a propósito:** `env-schema.ts` es puro y testeable,
+`env.ts` lleva `import "server-only"` y es la única línea que lee `process.env`.
+Sin ese guard, un componente cliente que alcance la config arrastra Zod entero al
+navegador — medido: 392 KB.
 
 **Este árbol es adónde van las cosas, no lo que hay el día uno.** Una carpeta se
 crea cuando tiene contenido: si `markets` empieza siendo tres funciones, que sean
@@ -209,11 +222,63 @@ app → modules (vía index.ts) → shared
    —`dynamicParams` deja que el resto se genere on demand—, después se alarga el
    detalle por token, y la frescura del listado al final, porque es la que se ve.
 
-   Los errores también cuentan para el límite, así que un reintento en loop se
-   paga. `TODO(pablo):` el detalle por token (descripción, tickers de venues para
-   "dónde comprarlo") necesita `/coins/{id}`, que es una llamada por token: a
-   250 tokens revalidados cada 7 días son ~1.071/mes. Se decide al escribir
-   `markets`.
+   Los errores también cuentan para el límite. Por eso `fetchTokens` reintenta
+   **una sola vez** y solo ante 429 o 5xx: dos créditos de 10.000 valen evitar
+   que un hipo de CoinGecko bloquee un deploy, y un loop no.
+
+   **Venues ("dónde comprarlo"), resuelto el 2026-09-29.** `/coins/{id}/tickers`,
+   una llamada por token, revalidando cada **7 días**: a 250 tokens son
+   ~1.071/mes (11 % del cupo). Diario serían 7.500 y no entran al lado del
+   listado.
+
+   Y de ahí sale una tercera perilla, `ATLAS_PRERENDERED_TOKEN_COUNT`, porque
+   **cada ficha prerenderizada gasta dos créditos en el build**. Medido: un build
+   con 10 fichas hace **24 llamadas**: 4 fijas (listado, dos categorías, tasas) y
+   **2 por ficha** (tickers e historial). Bajarla
+   abarata el build sin romper nada —`dynamicParams` genera el resto al primer
+   request—; en 0, un build cuesta un crédito.
+
+   | | Default (dev y CI) | Producción |
+   |---|---|---|
+   | `ATLAS_TOKEN_COUNT` | 10 | 250 |
+   | `ATLAS_PRERENDERED_TOKEN_COUNT` | 10 | a elegir según cuántos builds al mes |
+   | `ATLAS_LISTING_REVALIDATE_SECONDS` | 600 | 600 |
+
+   **Las cinco llamadas que hace Atlas**, con su intervalo y su porqué:
+
+   | Endpoint | Revalidate | Alcance | Costo a 250 tokens |
+   |---|---|---|---|
+   | `/coins/markets` | 600 s | el catálogo entero | 4.320/mes (43 %) |
+   | `/coins/markets?category=…` | 3.600 s | un preset, por categoría | 720/mes cada uno |
+   | `/coins/markets?ids=…` | 24 h | un token que el listado no trae | 1 por token de cola larga |
+   | `/coins/{id}/tickers` | 7 días | **por token** | ~1.071/mes (11 %) |
+   | `/coins/{id}/market_chart?days=30` | 24 h | **por token** | según tráfico, ver abajo |
+   | `/exchange_rates` | 6 h | **todas las monedas y todos los tokens** | 120/mes (1 %) |
+
+   Dos cosas que no son obvias y conviene no volver a deducir:
+
+   - **`market_chart?days=30` cubre los tres rangos.** Devuelve 720 puntos
+     horarios, así que 24 h, 7 d y 30 d son recortes del mismo payload: cambiar
+     de rango no gasta un crédito. El recorte se hace **en el servidor**
+     (`toRangedHistory`), porque mandarle al cliente los 720 puntos crudos costó
+     8.000 bytes de HTML y mandarle los tres rangos ya listos costó cero.
+   - **El gráfico escala con visitantes, no con el tiempo.** El techo es
+     (tokens visitados en la ventana) × (ventanas al mes). A 24 h son 30
+     ventanas: veinte tokens populares son ~600/mes (6 %), y una hora de
+     revalidate serían 14.400 y no entrarían.
+
+   **El build de hoy cuesta 24 créditos** con los defaults: 1 del listado + 10 de
+   tickers + 10 de historial + 2 de categorías + 1 de tasas.
+
+   **El plan Demo no manda `trust_score`.** Verificado el 2026-09-29: los 100
+   tickers de bitcoin vienen con `trust_score: null`. Descartar los venues sin
+   rating —que era la regla intuitiva— deja la sección vacía. La regla correcta
+   es que un `"red"` explícito es un rechazo y la ausencia no.
+
+   `TODO(pablo):` sin `trust_score`, los venues quedan ordenados por **volumen
+   autoinformado**, que es justamente lo que el rating existe para corregir. Si
+   el orden termina mostrando exchanges dudosos arriba, la salida es una lista
+   curada de venues conocidos, y es una decisión de producto, no técnica.
 
 La API key va en el env, validada con Zod en `shared/config/env.ts`. Nunca
 `process.env` suelto en el resto del código.
@@ -235,34 +300,40 @@ Trabajá solo en la fase actual. No adelantes la siguiente.
 
 ### Fase 1 — el catálogo con los datos adentro del HTML
 
-- [ ] Listado con búsqueda, filtros y orden. Andan **sin JavaScript**: son
+- [x] Listado con búsqueda, filtros y orden. Andan **sin JavaScript**: son
       parámetros en la URL y el servidor devuelve la página ya ordenada. Un
       catálogo que necesita JS para ordenarse contradice la tesis.
-- [ ] Página por token: precio, capitalización, suministro, rangos.
-- [ ] **Dónde comprarlo**, con enlaces a los venues oficiales.
-- [ ] Presupuesto de performance en CI **desde el primer commit**.
-- [ ] Un test que abra el HTML construido de una página de token y **busque el
-      precio adentro**. Es una línea y es la prueba de la tesis: si alguien mete
-      un `"use client"` de más y los datos se van al cliente, ese test se pone
-      rojo antes que cualquier métrica.
-- [ ] README: cómo correr, de dónde salen los datos, cómo se mide el presupuesto.
-- [ ] ADR 0001: ISR en vez de `output: 'export'`.
+- [x] Página por token: precio, capitalización, suministro, rangos.
+- [x] **Dónde comprarlo**, con enlaces a los venues oficiales.
+- [x] Presupuesto de performance en CI **desde el primer commit**. Bytes de JS y
+      de HTML, en `tests/performance-budget.test.ts`. LCP y CLS siguen faltando.
+- [x] Un test que abra el HTML construido de una página de token y **busque el
+      precio adentro**: `tests/prerendered-html.test.ts`.
+
+      **Ojo con cómo se lee esa promesa.** Un `"use client"` de más **no** saca
+      los datos del HTML: un componente cliente igual se renderiza en el
+      servidor. Lo que el test atrapa es que la ruta deje de prerenderizarse, o
+      que los datos pasen a buscarse desde el navegador. Verificado poniéndolo
+      rojo a propósito.
+- [x] README: cómo correr, de dónde salen los datos, cómo se mide el presupuesto.
+- [x] ADR 0001: ISR en vez de `output: 'export'`.
+- [ ] **SEO:** canonical, sitemap con todos los tokens, JSON-LD y Open Graph. El
+      módulo `seo/` no existe todavía; la ficha tiene canonical propio y nada más.
+- [ ] **Smoke e2e con Playwright** y **Lighthouse CI** con umbrales medidos en el
+      primer deploy. Los dos esperan a que Atlas esté en Vercel.
 
 #### Orden de trabajo, porque cada paso hace barato al siguiente
 
-1. **Andamiaje con las reglas puestas:** Next + TS strict + Tailwind + Vitest +
-   ESLint con `boundaries`, y el CI corriendo `check`, `lint`, `test` y `build`.
-   Sin features. **Hecho.**
-2. **`catalog/domain` completo y testeado sin red:** el tipo `Token`, los filtros,
-   el orden y el formato contra un fixture JSON. Acá se decide la forma del
-   dominio, que es lo más caro de cambiar después.
-3. **`catalog/data` contra CoinGecko de verdad**, con el schema de Zod y las
-   revalidaciones comentadas una por una. Primer deploy a Vercel.
-4. **Lighthouse CI con los umbrales medidos en ese primer deploy**, y el test que
-   busca el precio dentro del HTML. A partir de ahí el presupuesto defiende solo
-   lo que el proyecto promete.
+1. **Andamiaje con las reglas puestas. Hecho.**
+2. **`catalog/domain` completo y testeado sin red. Hecho.**
+3. **`catalog/data` contra CoinGecko de verdad. Hecho.** Falta el primer deploy a
+   Vercel, que es lo que bloquea todo lo de abajo.
+4. **El test del precio en el HTML. Hecho**, junto con el presupuesto de bytes.
+   Lighthouse queda para cuando haya un deploy que medir.
 
-Recién entonces empieza la UI de verdad.
+**Lo que bloquea hoy: el deploy.** Sin él no hay umbrales de LCP que fijar, ni
+smoke e2e contra una URL real, ni las dos mediciones —antes y después— que el
+case study necesita. Lo demás de la fase 1 ya está en verde.
 
 ### Fase 2
 
@@ -276,18 +347,40 @@ que depende de lo anterior.
 Carteras, alertas de precio, login, datos que CoinGecko no dé gratis.
 
 El gráfico de precios interactivo de la ficha **sí está adentro** desde el
-2026-09-29 (`docs/adr/0002`), con una condición: es aditivo. Los números se
+2026-09-29 (`docs/adr/0003`), con una condición: es aditivo. Los números se
 renderizan en el servidor y el gráfico se monta al lado. Si el presupuesto de
 performance no lo banca, se cae el gráfico, no los números.
 
+También entró un **convertidor a fiat** (9 monedas) en la ficha, con la misma
+condición: es información, no una cotización, y lo dice en pantalla.
+
 ## El presupuesto de performance
 
-Es la feature, no la verificación. Lighthouse CI corre en GitHub Actions contra
-el deploy de preview y **falla el job** cuando se pasa un umbral. Como mínimo:
-**LCP**, **CLS** y **bytes de JavaScript** de la página de un token.
+Es la feature, no la verificación, y **ya corre en cada commit**:
+`tests/performance-budget.test.ts` mide la salida del build y rompe cuando se
+pasa. Por eso `npm run build` va **antes** de `npm test`, en CI y en local.
 
-`TODO(pablo):` los umbrales se fijan en el primer deploy, midiendo lo que ya hay,
-y a partir de ahí solo bajan. Poner números antes de medir es inventar datos.
+| Métrica | Presupuesto | Medido |
+|---|---|---|
+| JavaScript de una ficha | 290.000 gz | ~281.000 |
+| HTML de una ficha | 10.000 gz | ~8.600 |
+
+Los bytes son deterministas, así que no necesitan navegador. **LCP y CLS sí**, y
+por eso siguen siendo `TODO(pablo):` con Lighthouse contra el primer deploy: sus
+umbrales tienen que salir de esa medición.
+
+**Cómo se mueve un presupuesto.** Solo cuando el test se pone rojo primero y la
+decisión queda escrita con las dos mediciones. Ya pasó tres veces en un día:
+
+- HTML 12.000 → 16.000 por las lecturas del tooltip, y **de vuelta a 11.000**
+  cuando el recorte volvió al servidor. Un presupuesto que solo sube no es un
+  presupuesto.
+- JS 186.000 → 300.000 al migrar a Recharts (177.054 → 288.986, +63 %), en
+  `docs/adr/0003`.
+
+Antes de subir uno, se recorta lo que no se ve: precisión de coordenadas, puntos
+superpuestos, datos que cruzan al cliente sin necesidad. Eso solo ya ahorró 47 %
+en el HTML de la ficha.
 
 El número que va al case study no es "se siente rápido": es el **peso del HTML de
 una página de token y el LCP en red lenta, antes y después**. Guardá las dos
@@ -301,6 +394,29 @@ mediciones desde el principio; la de "antes" no se recupera más tarde.
 - Sin `any`. Sin `// @ts-ignore` salvo con comentario que explique por qué y un `TODO`.
 - **Server Components por defecto.** `"use client"` solo donde haya estado, eventos o APIs del navegador, y lo más abajo posible: la directiva es contagiosa hacia abajo.
 - Cuando un componente cliente envuelve contenido estático, pasalo como `children` en vez de importarlo adentro: así ese contenido sigue renderizándose en el servidor.
+- **Hay cuatro `"use client"` en el proyecto, y cada uno se justificó.** Si agregás
+  uno, sumalo a esta lista con su motivo; si la lista crece sin motivos, el diseño
+  se está yendo al cliente:
+
+  | Archivo | Por qué |
+  |---|---|
+  | `shared/ui/SiteNav.tsx` | Un layout no recibe el pathname en el servidor, y `headers()` sacaría toda ruta del prerender solo para pintar un link |
+  | `shared/ui/chart.tsx` | Primitivos de shadcn sobre Recharts |
+  | `catalog/ui/PriceChartPanel.tsx` | El rango del gráfico es estado, y Recharts dibuja en el cliente |
+  | `currency/ui/CurrencyConverter.tsx` | Es una calculadora: dos inputs y un número que los sigue |
+
+  **Lo que ninguno hace es traer datos.** Las tasas y las series llegan con la
+  página, ya recortadas en el servidor; cambiar de moneda o de rango es
+  aritmética, no un fetch.
+- **Nada de widgets nativos donde haya que estilar.** Sin `<select>` ni
+  `type="number"`: el primero abre un popover que dibuja el navegador y el
+  segundo trae los spinners de Chrome, y ninguno de los dos se puede estilar. Con
+  pocas opciones fijas, pills; para montos, `type="text"` con
+  `inputMode="decimal"`, que conserva el teclado numérico del teléfono.
+- **El elemento activo no se puede clickear.** La página en la que estás se
+  renderiza como `<span aria-current="page">`, no como link; el rango o la moneda
+  ya elegidos van `disabled`. Saca el click, el stop de tabulación y la
+  navegación inútil de una sola vez.
 - Sin estado global salvo necesidad demostrada.
 - **Estética: clara y densa, tabular, cerca de un terminal financiero sobrio.** Paleta propia, que después se replica como el tema `atlas` del portfolio; ese tema se crea cuando llegue el case study, no antes.
 - **Tokens semánticos, no valores a mano.** Nada de colores, fuentes, radios ni espaciados hardcodeados en componentes.
@@ -333,6 +449,11 @@ portfolio. Si descubrís algo del entorno que costó averiguar, anotalo acá.
 - **`next typegen` antes de `tsc`.** Next 16 genera tipos globales (`LayoutProps`, `PageProps`) en `.next/types/`, y `next-env.d.ts` los importa. En un clone limpio, `tsc --noEmit` a secas falla porque esos tipos no existen todavía. Por eso `npm run check` es `next typegen && tsc --noEmit`.
 - **Git Bash traduce los argumentos que empiezan con `/`.** `taskkill /PID 1234 /F` falla con `Argumento u opción no válido - "C:/Program Files (x86)/Git/PID"`: MSYS lee `/PID` como una ruta POSIX y la convierte. Salidas, de mejor a peor: `Stop-Process -Id 1234 -Force` en PowerShell, `taskkill //PID 1234 //F` con la barra duplicada, o `MSYS_NO_PATHCONV=1` delante. Vale para cualquier `.exe` de Windows con flags de barra, no solo `taskkill`.
 - **`next dev` no arranca un segundo servidor sobre el mismo directorio.** Toma otro puerto, avisa `Another next dev server is already running` y te da el PID y el log en `.next/dev/logs/next-development.log`. Si un agente dejó uno vivo, matalo con el PID que imprime ahí. **Un agente que levanta el dev server lo baja antes de terminar el turno**, o queda ocupando el 3000 en la sesión siguiente.
+- **Una clase inválida de Tailwind no falla: no existe.** `max-w-75ch` compila a
+  nada y el elemento queda sin ancho máximo, en silencio — ni el build ni el lint
+  dicen una palabra. Los valores arbitrarios van entre corchetes: `max-w-[75ch]`.
+  Si un estilo "no se aplica", buscá la clase en el CSS construido
+  (`.next/static/**/*.css`) antes de sospechar de la cascada.
 - **Los heredocs de esta terminal se comen un nivel de backslash, incluso citados.** Cualquier archivo con secuencias de escape se escribe con la herramienta de edición, no por heredoc. Y la lógica que puede estar mal va en un `.ts` de `domain/`, no al lado del componente, para que los tests la vean.
 
 ## Comandos

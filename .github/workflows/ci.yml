@@ -32,6 +32,10 @@ jobs:
 
       - run: npm test
 
-  # TODO(pablo): Lighthouse CI job against the Vercel preview deploy. Thresholds
-  # for LCP, CLS and JavaScript bytes get measured on the first deploy — writing
-  # numbers before measuring is inventing data.
+  # The JavaScript and HTML byte budgets already run above, inside `npm test`:
+  # bytes are deterministic, so they need no browser and gate every commit.
+  #
+  # TODO(pablo): a Lighthouse CI job for LCP and CLS against the Vercel preview
+  # deploy. Those depend on a real browser over a real network, and their
+  # thresholds have to come from the first deploy — writing numbers before
+  # measuring is inventing data.

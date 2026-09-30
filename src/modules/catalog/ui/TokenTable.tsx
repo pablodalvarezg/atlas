@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Fragment } from "react";
 
 import {
   EMPTY,
@@ -46,6 +47,15 @@ const COLUMNS: readonly {
   { key: "marketCap", label: "Market cap", align: "right", visibility: "hidden md:table-cell" }, // prettier-ignore
 ];
 
+/*
+ * Two columns the header renders but that are not sortable: the trend line and
+ * the buy link. They sit outside COLUMNS because a sort key is what makes a
+ * heading a link, and neither of these has one.
+ */
+const EXTRA_COLUMN_COUNT = 2;
+// The buy link and the trend line: rendered by the header, but neither has a
+// sort key, which is what would make its heading a link.
+
 const trendOf = (change: number | null) =>
   change === null || change === 0 ? "flat" : change > 0 ? "up" : "down";
 
@@ -84,37 +94,45 @@ export function TokenTable({ tokens, query }: Props) {
             const active = query.sort === column.key;
 
             return (
-              <th
-                key={column.key}
-                scope="col"
-                // Announces the current ordering, so the arrow is not the only
-                // thing saying which column is in use.
-                aria-sort={
-                  active
-                    ? query.direction === "asc"
-                      ? "ascending"
-                      : "descending"
-                    : "none"
-                }
-                className={`py-3 font-medium ${column.align === "right" ? "text-right" : "text-left"} ${column.visibility}`}
-              >
-                <Link
-                  href={`${REFINED_PATH}?${sortQuery(query, column.key)}`}
-                  className="inline-flex items-center gap-1 rounded-sm px-2 hover:text-content focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+              <Fragment key={column.key}>
+                <th
+                  scope="col"
+                  // Announces the current ordering, so the arrow is not the only
+                  // thing saying which column is in use.
+                  aria-sort={
+                    active
+                      ? query.direction === "asc"
+                        ? "ascending"
+                        : "descending"
+                      : "none"
+                  }
+                  className={`py-3 font-medium ${column.align === "right" ? "text-right" : "text-left"} ${column.visibility}`}
                 >
-                  {/* The rank column's label is a glyph, so the link needs a
+                  <Link
+                    href={`${REFINED_PATH}?${sortQuery(query, column.key)}`}
+                    className="inline-flex items-center gap-1 rounded-sm px-2 hover:text-content focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                  >
+                    {/* The rank column's label is a glyph, so the link needs a
                       name a screen reader can actually read out. */}
-                  {column.key === "rank" && (
-                    <span className="sr-only">Rank</span>
-                  )}
-                  <span aria-hidden={column.key === "rank"}>
-                    {column.label}
-                  </span>
-                  <span aria-hidden="true" className="text-xs">
-                    {active ? (query.direction === "asc" ? "▲" : "▼") : ""}
-                  </span>
-                </Link>
-              </th>
+                    {column.key === "rank" && (
+                      <span className="sr-only">Rank</span>
+                    )}
+                    <span aria-hidden={column.key === "rank"}>
+                      {column.label}
+                    </span>
+                    <span aria-hidden="true" className="text-xs">
+                      {active ? (query.direction === "asc" ? "▲" : "▼") : ""}
+                    </span>
+                  </Link>
+                </th>
+                {/* Between the token and its price, because deciding to buy
+                  happens right after reading the name. */}
+                {column.key === "name" && (
+                  <th scope="col" className="py-3 font-medium">
+                    <span className="sr-only">Where to buy</span>
+                  </th>
+                )}
+              </Fragment>
             );
           })}
           <th
@@ -129,7 +147,7 @@ export function TokenTable({ tokens, query }: Props) {
         {tokens.length === 0 ? (
           <tr>
             <td
-              colSpan={COLUMNS.length + 1}
+              colSpan={COLUMNS.length + EXTRA_COLUMN_COUNT}
               className="py-12 text-center text-content-muted"
             >
               No token matches {`"${query.search}"`}.
@@ -168,6 +186,19 @@ export function TokenTable({ tokens, query }: Props) {
                   <span className="text-content-muted uppercase">
                     {token.symbol}
                   </span>
+                </Link>
+              </td>
+              <td className="hidden px-2 py-3 sm:table-cell">
+                {/* Goes to the token page, not straight to an exchange: the
+                    venues for one row are a CoinGecko call each, and they do
+                    not come back with the listing. 250 rows per refresh would
+                    be 36,000 calls a day against a 10,000 a month quota. */}
+                <Link
+                  href={`/token/${token.id}#where-to-buy`}
+                  className="inline-block rounded-md border border-border px-3 py-1 text-xs font-medium whitespace-nowrap hover:bg-surface-muted hover:text-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                >
+                  Buy Now
+                  <span className="sr-only"> {token.name}</span>
                 </Link>
               </td>
               <td className="px-2 py-3 text-right tabular-nums">

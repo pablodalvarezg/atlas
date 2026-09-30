@@ -45,6 +45,7 @@ describe("parseListingQuery", () => {
       search: "",
       sort: "rank",
       direction: "asc",
+      preset: "",
     });
   });
 
@@ -116,6 +117,7 @@ describe("listTokens", () => {
       search: "o",
       sort: "price",
       direction: "desc",
+      preset: "",
     });
 
     // "Bitcoin" and "Ghost" contain an "o"; "Ethereum" does not. Ghost has no
@@ -125,7 +127,12 @@ describe("listTokens", () => {
 });
 
 describe("sortQuery", () => {
-  const current = { search: "", sort: "rank", direction: "asc" } as const;
+  const current = {
+    search: "",
+    sort: "rank",
+    direction: "asc",
+    preset: "",
+  } as const;
 
   it("flips the direction of the column already in use", () => {
     expect(sortQuery(current, "rank")).toBe("sort=rank&dir=desc");
@@ -153,5 +160,26 @@ describe("findToken", () => {
 
   it("returns undefined for an id that is not listed, so the page can 404", () => {
     expect(findToken([bitcoin], "nothing")).toBeUndefined();
+  });
+});
+
+describe("carrying the preset", () => {
+  const inPreset = {
+    search: "",
+    sort: "rank",
+    direction: "asc",
+    preset: "rwa",
+  } as const;
+
+  it("reads the preset off the query string", () => {
+    expect(parseListingQuery({ preset: "rwa" }).preset).toBe("rwa");
+  });
+
+  it("keeps it when reordering, so a preset does not become the whole market", () => {
+    expect(sortQuery(inPreset, "price")).toBe("preset=rwa&sort=price&dir=desc");
+  });
+
+  it("is empty for the whole catalogue", () => {
+    expect(parseListingQuery({}).preset).toBe("");
   });
 });

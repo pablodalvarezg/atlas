@@ -60,3 +60,21 @@ export function formatSupply(value: number | null): string {
     maximumFractionDigits: 2,
   }).format(value);
 }
+
+/** Axis labels for a one-day window: the hour is what distinguishes points. */
+export function formatHour(at: number): string {
+  return new Intl.DateTimeFormat(LOCALE, {
+    hour: "numeric",
+    hour12: true,
+    timeZone: "UTC",
+  }).format(at);
+}
+
+/** Axis labels for a multi-day window, and the "data ends" disclaimer. */
+export function formatShortDate(at: number): string {
+  return new Intl.DateTimeFormat(LOCALE, {
+    month: "short",
+    day: "numeric",
+    timeZone: "UTC",
+  }).format(at);
+}

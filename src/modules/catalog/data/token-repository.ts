@@ -6,6 +6,7 @@ import {
   marketsResponseSchema,
   toToken,
 } from "@modules/catalog/data/coingecko-schema";
+import { findToken } from "@modules/catalog/domain/listing";
 import type { Token } from "@modules/catalog/domain/token";
 import { env } from "@shared/config/env";
 
@@ -20,17 +21,27 @@ import { env } from "@shared/config/env";
  */
 const MARKETS_ENDPOINT = "https://api.coingecko.com/api/v3/coins/markets";
 
-export class TokenRepositoryError extends Error {}
+type MarketsQuery = {
+  readonly perPage: number;
+  /** A CoinGecko category id, or undefined for the whole market. */
+  readonly category?: string;
+  /** A single coin id, for resolving a token the listing does not carry. */
+  readonly ids?: string;
+};
 
-function buildUrl(): URL {
+function buildUrl({ perPage, category, ids }: MarketsQuery): URL {
   const url = new URL(MARKETS_ENDPOINT);
 
   url.searchParams.set("vs_currency", "usd");
   url.searchParams.set("order", "market_cap_desc");
   // One credit per call regardless of page size, so this number is about build
   // time and payload weight, not quota. 10 in development, 250 in production.
-  url.searchParams.set("per_page", String(env.ATLAS_TOKEN_COUNT));
+  url.searchParams.set("per_page", String(perPage));
   url.searchParams.set("page", "1");
+  // A category is a different upstream URL, so it is a cache entry -- and a
+  // credit -- of its own. That is why presets revalidate far more slowly.
+  if (category !== undefined) url.searchParams.set("category", category);
+  if (ids !== undefined) url.searchParams.set("ids", ids);
   // The sparkline rides along on this same call; fetching it separately would
   // double the cost of the one request the whole catalogue depends on.
   url.searchParams.set("sparkline", "true");
@@ -54,8 +65,12 @@ const isWorthRetrying = (status: number) => status === 429 || status >= 500;
 const wait = (ms: number) =>
   new Promise<void>((resolve) => setTimeout(resolve, ms));
 
-async function requestMarkets(): Promise<Response> {
-  return fetch(buildUrl(), {
+async function requestMarkets(
+  query: MarketsQuery,
+  revalidate: number,
+  tag: string,
+): Promise<Response> {
+  return fetch(buildUrl(query), {
     // The key goes in the header: as a query parameter it would end up in logs
     // and in Next's cache key.
     headers: env.COINGECKO_API_KEY
@@ -70,15 +85,19 @@ async function requestMarkets(): Promise<Response> {
        * headroom. A ceiling rather than a forecast — ISR only revalidates when a
        * request arrives.
        */
-      revalidate: env.ATLAS_LISTING_REVALIDATE_SECONDS,
-      // Named so phase 2's scheduled ingest can invalidate it on demand.
-      tags: ["catalog-markets"],
+      revalidate,
+      // Named so phase 2's scheduled ingest can invalidate one without the rest.
+      tags: [tag],
     },
   });
 }
 
-export async function fetchTokens(): Promise<Token[]> {
-  let response = await requestMarkets();
+async function fetchMarkets(
+  query: MarketsQuery,
+  revalidate: number,
+  tag: string,
+): Promise<Token[]> {
+  let response = await requestMarkets(query, revalidate, tag);
 
   /*
    * Exactly one retry, and only for the statuses that mean "try again": a rate
@@ -90,11 +109,13 @@ export async function fetchTokens(): Promise<Token[]> {
    */
   if (!response.ok && isWorthRetrying(response.status)) {
     await wait(RETRY_DELAY_MS);
-    response = await requestMarkets();
+    response = await requestMarkets(query, revalidate, tag);
   }
 
   if (!response.ok) {
-    throw new TokenRepositoryError(
+    // A plain Error: nothing catches this by type, and a subclass that nobody
+    // distinguishes is a class for nobody. Give it one when a caller needs it.
+    throw new Error(
       `CoinGecko replied ${response.status} ${response.statusText}`,
     );
   }
@@ -102,10 +123,68 @@ export async function fetchTokens(): Promise<Token[]> {
   const parsed = marketsResponseSchema.safeParse(await response.json());
 
   if (!parsed.success) {
-    throw new TokenRepositoryError(
+    throw new Error(
       `CoinGecko returned an unexpected shape:\n${z.prettifyError(parsed.error)}`,
     );
   }
 
   return parsed.data.map(toToken);
+}
+
+/** The catalogue: every token Atlas lists, at the listing's own freshness. */
+export async function fetchTokens(): Promise<Token[]> {
+  return fetchMarkets(
+    { perPage: env.ATLAS_TOKEN_COUNT },
+    env.ATLAS_LISTING_REVALIDATE_SECONDS,
+    "catalog-markets",
+  );
+}
+
+/*
+ * A preset: the top tokens of one CoinGecko category.
+ *
+ * Every category is a distinct upstream URL, so it is a distinct cache entry and
+ * a distinct credit. An hour rather than ten minutes because a category's top
+ * ten does not reshuffle in ten minutes: 720 calls a month each, against the
+ * 4,320 the main listing spends.
+ */
+const PRESET_REVALIDATE_SECONDS = 3_600;
+
+export async function fetchCategoryTokens(
+  categoryId: string,
+  count: number,
+): Promise<Token[]> {
+  return fetchMarkets(
+    { perPage: count, category: categoryId },
+    PRESET_REVALIDATE_SECONDS,
+    `catalog-category-${categoryId}`,
+  );
+}
+
+/*
+ * One token by id, for the ones the listing does not carry.
+ *
+ * A preset links to tokens outside the top ATLAS_TOKEN_COUNT, and so does any
+ * bookmark from when the ranking was different. Resolving those against the
+ * listing alone left the links dead — measured at 36 of them in development.
+ *
+ * Same endpoint, same schema, same mapper as the catalogue: `ids=` filters
+ * /coins/markets to one coin. It is a credit, but only for a token nobody
+ * listed, cached for a day and shared by everyone who opens that page.
+ */
+const SINGLE_TOKEN_REVALIDATE_SECONDS = 86_400;
+
+export async function fetchTokenById(id: string): Promise<Token | null> {
+  // The listing first, because it is already cached and costs nothing. Only a
+  // token nobody listed reaches the second call.
+  const listed = findToken(await fetchTokens(), id);
+  if (listed !== undefined) return listed;
+
+  const tokens = await fetchMarkets(
+    { perPage: 1, ids: id },
+    SINGLE_TOKEN_REVALIDATE_SECONDS,
+    `catalog-token-${id}`,
+  );
+
+  return tokens[0] ?? null;
 }

@@ -21,17 +21,30 @@ const envSchema = z.object({
   NEXT_PUBLIC_SITE_URL: blankAsUnset(z.url().default("http://localhost:3000")),
 
   /*
-   * The two knobs that spend the CoinGecko Demo quota (10,000 credits/month).
-   * Only the token count differs between development and production; the
-   * interval below is 600 s everywhere, which is already its default.
+   * The three knobs that spend the CoinGecko Demo quota (10,000 credits/month).
    *
-   * A call to /coins/markets costs one credit whether it returns 10 coins or
-   * 250, so this number does not change what the listing costs. What it does
-   * change is the per-token detail calls a build makes — one each — plus build
-   * time and payload size. 250 is the endpoint's documented maximum.
+   * How many tokens the catalogue lists. A call to /coins/markets costs one
+   * credit whether it returns 10 coins or 250, so this number does not change
+   * what the listing costs — only build time and payload weight. 250 is the
+   * endpoint's documented maximum.
    */
   ATLAS_TOKEN_COUNT: blankAsUnset(
     z.coerce.number().int().min(1).max(250).default(10),
+  ),
+
+  /*
+   * How many token pages `next build` prerenders, which is a different question
+   * with a different price: each prerendered page makes two per-token calls,
+   * `/coins/{id}/tickers` and `/coins/{id}/market_chart`, so this number *is*
+   * most of the build's credit cost.
+   *
+   * The pages left out still work — `dynamicParams` generates them on the first
+   * request and caches the result, trading a cold first visit for a cheaper
+   * build. At 0 a build costs only the four fixed calls: the listing, the two
+   * presets and the exchange rates.
+   */
+  ATLAS_PRERENDERED_TOKEN_COUNT: blankAsUnset(
+    z.coerce.number().int().min(0).max(250).default(10),
   ),
 
   /*
@@ -61,8 +74,16 @@ export function parseEnv(source: Record<string, string | undefined>): Env {
    * A production deploy that forgets the canonical origin would silently fall
    * back to localhost and ship it inside canonical URLs, the sitemap and
    * og:url — broken in the one way a catalogue cannot afford, and invisible.
+   *
    * Keyed on VERCEL_ENV rather than NODE_ENV so that CI builds and local
-   * production builds, which are not deploys, stay unaffected.
+   * production builds, which are not deploys, stay unaffected. VERCEL_ENV is
+   * injected by Vercel ("production" | "preview" | "development"), never set by
+   * hand, and is absent everywhere else.
+   *
+   * Its own caveat: Vercel only exposes it when "Enable access to System
+   * Environment Variables" is on in project settings. With that off this guard
+   * silently does nothing, so it is a safety net rather than the mechanism —
+   * the mechanism is setting NEXT_PUBLIC_SITE_URL in the project.
    */
   if (
     source.VERCEL_ENV === "production" &&

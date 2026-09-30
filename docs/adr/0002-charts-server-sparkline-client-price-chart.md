@@ -1,6 +1,10 @@
 # 0002 — Server-rendered sparklines, a real chart library for the price chart
 
-Status: accepted — 2026-09-29
+Status: **partially superseded** — the sparkline half stands; the token page's
+chart was replaced on 2026-09-29 by
+[ADR 0003](0003-shadcn-charts-over-recharts.md), which has the measured cost.
+
+Accepted 2026-09-29.
 
 ## Context
 
