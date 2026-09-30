@@ -41,7 +41,7 @@ export default async function SearchPage({
   const tokens =
     preset === undefined
       ? await fetchTokens()
-      : await fetchCategoryTokens(preset.categoryId, preset.count);
+      : await fetchCategoryTokens(preset.categoryId);
 
   return (
     <CatalogView

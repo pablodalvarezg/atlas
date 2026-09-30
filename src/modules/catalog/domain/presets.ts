@@ -12,7 +12,6 @@ export type Preset = {
   readonly title: string;
   readonly description: string;
   readonly categoryId: string;
-  readonly count: number;
 };
 
 export const PRESETS: readonly Preset[] = [
@@ -20,17 +19,15 @@ export const PRESETS: readonly Preset[] = [
     slug: "rwa",
     title: "Real world assets",
     description:
-      "The ten largest tokens backed by assets that exist off-chain, by market capitalisation.",
+      "Tokens backed by assets that exist off-chain, by market capitalisation.",
     categoryId: "real-world-assets-rwa",
-    count: 10,
   },
   {
     slug: "exchange-tokens",
     title: "Exchange tokens",
     description:
-      "The ten largest tokens issued by centralised exchanges, by market capitalisation.",
+      "Tokens issued by centralised exchanges, by market capitalisation.",
     categoryId: "centralized-exchange-token-cex",
-    count: 10,
   },
 ];
 

@@ -12,7 +12,7 @@ import {
 /*
  * Prerendered like `/`: a preset reads no searchParams, so it keeps the edge
  * cache. The upstream call behind it revalidates hourly rather than every ten
- * minutes — see the repository for why a category's top ten can afford that.
+ * minutes — see the repository for why a category's top page can afford that.
  */
 export const revalidate = 3600;
 
@@ -46,7 +46,7 @@ export default async function CategoryPage({
 
   if (preset === undefined) notFound();
 
-  const tokens = await fetchCategoryTokens(preset.categoryId, preset.count);
+  const tokens = await fetchCategoryTokens(preset.categoryId);
 
   return (
     <CatalogView

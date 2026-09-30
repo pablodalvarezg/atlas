@@ -141,21 +141,20 @@ export async function fetchTokens(): Promise<Token[]> {
 }
 
 /*
- * A preset: the top tokens of one CoinGecko category.
+ * A preset: the top tokens of one CoinGecko category, as many as the listing.
  *
  * Every category is a distinct upstream URL, so it is a distinct cache entry and
  * a distinct credit. An hour rather than ten minutes because a category's top
- * ten does not reshuffle in ten minutes: 720 calls a month each, against the
+ * page does not reshuffle in ten minutes: 720 calls a month each, against the
  * 4,320 the main listing spends.
  */
 const PRESET_REVALIDATE_SECONDS = 3_600;
 
 export async function fetchCategoryTokens(
   categoryId: string,
-  count: number,
 ): Promise<Token[]> {
   return fetchMarkets(
-    { perPage: count, category: categoryId },
+    { perPage: env.ATLAS_TOKEN_COUNT, category: categoryId },
     PRESET_REVALIDATE_SECONDS,
     `catalog-category-${categoryId}`,
   );
