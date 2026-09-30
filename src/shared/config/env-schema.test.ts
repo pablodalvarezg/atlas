@@ -82,9 +82,31 @@ describe("parseEnv", () => {
       const parsed = parseEnv({
         VERCEL_ENV: "production",
         NEXT_PUBLIC_SITE_URL: "https://atlas.example",
+        COINGECKO_API_KEY: "CG-abc123",
       });
 
       expect(parsed.NEXT_PUBLIC_SITE_URL).toBe("https://atlas.example");
+    });
+
+    it("refuses to build without the API key", () => {
+      // Optional by type, required here: unset, Atlas calls CoinGecko keyless,
+      // which a datacentre IP gets 401 for. That 401 reads as a bad key.
+      expect(() =>
+        parseEnv({
+          VERCEL_ENV: "production",
+          NEXT_PUBLIC_SITE_URL: "https://atlas.example",
+        }),
+      ).toThrow(/COINGECKO_API_KEY must be set/);
+    });
+
+    it("accepts a deploy that has both", () => {
+      expect(() =>
+        parseEnv({
+          VERCEL_ENV: "production",
+          NEXT_PUBLIC_SITE_URL: "https://atlas.example",
+          COINGECKO_API_KEY: "CG-abc123",
+        }),
+      ).not.toThrow();
     });
 
     it("leaves CI and local production builds alone", () => {

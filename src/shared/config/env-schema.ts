@@ -95,5 +95,25 @@ export function parseEnv(source: Record<string, string | undefined>): Env {
     );
   }
 
+  /*
+   * The same net around the API key, added after it caught nobody.
+   *
+   * The key is optional by type, so a misspelled variable name or one scoped to
+   * the wrong environment does not fail — it just stops the header being sent,
+   * and Atlas goes on making keyless requests. That reads as working from a
+   * laptop, where CoinGecko serves them, and fails on a deploy with
+   * `401 Unauthorized` from a shared datacentre IP. A 401 blamed on the key
+   * while the key was never sent is the worst kind of error message.
+   *
+   * So it is required where it matters, and the failure says which variable.
+   */
+  if (source.VERCEL_ENV === "production" && !source.COINGECKO_API_KEY?.trim()) {
+    throw new Error(
+      "Invalid environment:\nCOINGECKO_API_KEY must be set on a production deploy. " +
+        "Without it Atlas calls CoinGecko unauthenticated, which a datacentre IP " +
+        "gets 401 for — an error that looks like a bad key rather than a missing one.",
+    );
+  }
+
   return result.data;
 }
